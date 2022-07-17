@@ -8,18 +8,23 @@ def skew(x):
 
 
 class Kalman:
-    def __init__(self):
+    def __init__(self, q_init=None):
         
         # Nomilan state
-        self.q = np.array([0., 0, 0, 1])    # orientation
+        if q_init is not None:
+            self.q = np.array(q_init)
+        else:
+            self.q = np.array([0., 0, 0, 1])    # orientation
         self.wb = np.array([0., 0, 0])      # gyro bias
 
         # Error state
         #self.d_theta = np.array([0., 0, 0])
 
-        self.P = np.eye(3)*0.001 # error covariance
+        self.P = np.eye(3)*0.0005 # error covariance
 
-        self.Qi = np.eye(3)*1e-3**2 # measurement/process covariance TODO: tune
+        self.Qi = np.eye(3)*1.8e-5**2 # measurement/process covariance TODO: tune
+
+        self.is_initialized = False
 
     def transition_matrix(self, w, dt):
         rotmat = R.from_rotvec((w-self.wb)*dt).as_matrix().transpose()
@@ -44,15 +49,19 @@ class Kalman:
         theta = np.linalg.norm(rvec)
         # Eq (143) in micro theory
         thetaSkew = skew(rvec)
-        JRight = np.eye(3) - (1-np.cos(theta))/theta**2*thetaSkew + (theta-np.sin(theta))/theta**3*np.matmul(thetaSkew, thetaSkew)
+
+        if theta < 1e-6:
+            JRight = np.eye(3)
+        else:
+            JRight = np.eye(3) - (1-np.cos(theta))/theta**2*thetaSkew + (theta-np.sin(theta))/theta**3*np.matmul(thetaSkew, thetaSkew)
 
         rotmat = R.from_quat(self.q).as_matrix()
     
         qx, qy, qz, qw = self.q
         weird_skew = .5 * np.array([[qw, -qz, qy], [qz, qw, -qx], [-qy, qx, qw]])
 
-        H = np.matmul(-rotmat, skew(g))
-        H = np.matmul(H, JRight)
+        H = skew(np.matmul(rotmat.transpose(), g))
+        #H = np.matmul(H, JRight)
         #H = np.matmul(H, weird_skew)
 
         return H
@@ -70,12 +79,13 @@ class Kalman:
         self.q = rot.as_quat()
 
     def update(self, a, dt):
-        
-        a = a
-        a[0] *= -1
-        a[1] *= -1
-        a[2] *= 1
-        g = np.array([0, 0, 9.82])
+        a_norm = np.linalg.norm(a)
+        thresh = 1000 #.1
+        if a_norm-9.82 > thresh or a_norm-9.82 < -thresh:
+            print("Ignoring uncertain accel measurement")
+            return (0., 0, 0)
+        a = a / a_norm
+        g = np.array([0, 0, 1.])
     
         a_thresh = 10
         #if np.linalg.norm(a) > 9.82+a_thresh or np.linalg.norm(a) < 9.82-a_thresh:
@@ -85,7 +95,7 @@ class Kalman:
         H = self.measurement_matrix(g)
         
         #RR = np.eye(3)*0.00836**2 # TODO: tune
-        RR = np.eye(3)*1. # TODO: tune
+        RR = np.eye(3)*.018 # TODO: tune
 
         num = np.matmul(self.P, H.transpose())
         den = np.matmul(np.matmul(H, self.P), H.transpose()) + RR
@@ -95,30 +105,41 @@ class Kalman:
         # TODO: reset of d_theta (G*P*G^T)
         self.P = self.P - np.matmul(np.matmul(K, H), self.P)
 
-        residual = a - R.from_quat(self.q).apply(g)
+        residual = a - R.from_quat(self.q).inv().apply(g)
         d_theta = np.matmul(K, residual)
         rot = R.from_quat(self.q) * R.from_quat(list(d_theta/2.0) + [1])
         self.q = rot.as_quat()
         return residual
 
-    def generateOrientationData(self, data, predict=True, update=True):
+    def generateOrientationData(self, data, predict=True, update=True, q_offset=None):
         orientations = []
         covariances = []
         residuals = []
         dt = float(data["time"][1]) - float(data["time"][0])
+
         for i, t in enumerate(data["time"]):
-            print("Cov norm:", np.linalg.norm(self.P, ord=2))
+
+            q = self.q
+            if q_offset is not None:
+                rot = R.from_quat(list(-q_offset[:3]) + [q_offset[3]]) * R.from_quat(self.q)
+                q = rot.as_quat()
+                #self.q = q.copy()
+
+            orientations.append(q.copy())
+            covariances.append(self.P)
+
             w = np.array(list(map(float, data["gyro"][i])))
             self.predict(w, dt)
-            if update: 
-                a = np.array(list(map(float, data["accel"][i])))
+            if update:
+                a = np.array(data["accel"][i])
                 residual = self.update(a, dt)
                 residuals.append(np.abs(residual))
 
-            orientations.append(self.q.copy())
-            covariances.append(self.P)
             
-        return np.array(orientations), np.array(residuals)
+
+            
+            
+        return np.array(orientations), np.array(residuals), np.array(covariances)
 
 if __name__ == "__main__":
     data = {"time": [0.1*i for i in range(100)],

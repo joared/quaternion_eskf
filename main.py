@@ -7,6 +7,7 @@ import numpy as np
 from scipy.spatial.transform import Rotation as R
 import matplotlib.animation as animation
 import time
+from loaddata import loadAndroid
 
 def loadDataset(filename):
     import csv
@@ -20,12 +21,12 @@ def loadDataset(filename):
         reader = csv.reader(csvfile, delimiter=',', quotechar='|')
         for i, row in enumerate(reader):
             if i > 1:
-                data["time"].append(row[0])
-                orientation = row[2:5] + [row[1]]
+                data["time"].append(float(row[0]))
+                orientation = list(map(float, row[2:5])) + [float(row[1])]
                 data["orientation"].append(orientation)
-                data["accel"].append(row[5:8])
-                data["gyro"].append(row[8:11])
-                data["magnetometer"].append(row[11:14])
+                data["accel"].append(list(map(float, row[5:8])))
+                data["gyro"].append(list(map(float, row[8:11])))
+                data["magnetometer"].append(list(map(float, row[11:14])))
     
     return data
 
@@ -164,48 +165,75 @@ if __name__ == "__main__":
                 'dataset/TStick_Test02_Trial2.csv']
 
     refData = loadDataset(datasets[2])
+    #refData = loadAndroid("android_1")
     newData = refData.copy()
     
     kf = Kalman()
-    newOrientation, residuals = kf.generateOrientationData(refData, update=True)
+    newOrientation, residuals, covariances = kf.generateOrientationData(refData, 
+                                                                        update=True, 
+                                                                        #q_offset=np.array([0.028, -0.009, 0., 0.999])
+                                                                        )
 
     eulerErrors = []
     for est, true in zip(newOrientation, refData["orientation"]):
-        est = R.from_quat(est)
-        true = R.from_quat(true)
+        #est = R.from_quat(est)
+        #true = R.from_quat(true)
         
-        err = true.inv()*est
+        #err = true.inv()*est
+        eulerErrors.append(np.linalg.norm(true-est))
+        #eulerErrors.append(err.as_euler("ZYX"))
 
-        eulerErrors.append(err.as_euler("ZYX"))
     eulerErrors = np.array(eulerErrors)
     
+    #refData["orientation"] = newOrientation
+
     print("Est. state:", kf.q)
     print("Ref. orientation:", refData["orientation"][-1])
     newData["orientation"] = newOrientation
-    
-    axs = [ax for ax, _, _ in refData["accel"]]
-    print(len(refData["accel"]))
-    print(len(axs))
+    print("Mean NDQ:", np.mean(eulerErrors))
+    print("Max NDQ:", np.max(eulerErrors))
 
-    plt.figure()
-    plt.subplot(1, 2, 1)
-    plt.plot(eulerErrors[:, 0], c="b")
-    plt.plot(eulerErrors[:, 1], c="g")
-    plt.plot(eulerErrors[:, 2], c="r")
-    #plt.ylim(-.05, .05)
-    plt.subplot(1, 2, 2)
-    #plt.plot(residuals[:, 0], c="r")
-    #plt.plot(residuals[:, 1], c="g")
-    #plt.plot(residuals[:, 2], c="b")
-    plt.plot([float(ax) for ax, _, _ in refData["accel"]], c="r")
-    plt.plot([float(ay) for _, ay, _ in refData["accel"]], c="g")
-    plt.plot([float(az) for _, _, az in refData["accel"]], c="b")
-    #plt.ylim(-.1, .1)
+    if len(eulerErrors) > 0:
+        plt.figure()
+        
+        plt.subplot(4, 2, 1)
+        # plot quaternion
+        plt.plot(np.array(refData["orientation"])[:, 3])
+        plt.plot(newOrientation[:, 3], c="y")
+        
+        plt.subplot(4, 2, 2)
+        plt.plot(np.array(refData["orientation"])[:, 0])
+        plt.plot(newOrientation[:, 0], c="r")
+        
+        plt.subplot(4, 2, 3)
+        plt.plot(np.array(refData["orientation"])[:, 1])
+        plt.plot(newOrientation[:, 1], c="g")
+        
+        plt.subplot(4, 2, 4)
+        plt.plot(np.array(refData["orientation"])[:, 2])
+        plt.plot(newOrientation[:, 2], c="b")
+        
+        plt.subplot(4, 2, 5)
+        plt.plot(eulerErrors)
+        #plt.plot(eulerErrors[:, 0], c="b")
+        #plt.plot(eulerErrors[:, 1], c="g")
+        #plt.plot(eulerErrors[:, 2], c="r")
+        #plt.ylim(-.05, .05)
+        plt.subplot(4, 2, 6)
+        #plt.plot(residuals[:, 0], c="r")
+        #plt.plot(residuals[:, 1], c="g")
+        #plt.plot(residuals[:, 2], c="b")
+        #plt.plot([float(ax) for ax, _, _ in refData["accel"]], c="r")
+        #plt.plot([float(ay) for _, ay, _ in refData["accel"]], c="g")
+        #plt.plot([float(az) for _, _, az in refData["accel"]], c="b")
 
-    print(np.std([float(ax) for ax, _, _ in refData["accel"]]))
-    print(np.std([float(ay) for ay, _, _ in refData["accel"]]))
-    print(np.std([float(az) for az, _, _ in refData["accel"]]))
-    plt.show()
+        plt.plot([np.linalg.norm(cov, ord=2) for cov in covariances])
+        #plt.ylim(-.1, .1)
+
+        #print(np.std([float(ax) for ax, _, _ in refData["accel"]]))
+        #print(np.std([float(ay) for ay, _, _ in refData["accel"]]))
+        #print(np.std([float(az) for az, _, _ in refData["accel"]]))
+        plt.show()
 
     cani = CSAnimation()
     cani.animateDataset(newData, refData)
