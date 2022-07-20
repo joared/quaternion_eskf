@@ -1,6 +1,6 @@
 import matplotlib.pyplot as plt
 from cube import Cube
-from kalman import Kalman
+from kalman import Kalman, ESKF
 from coordinate_system import CoordinateSystemArtist, CoordinateSystem
 
 import numpy as np
@@ -164,15 +164,26 @@ if __name__ == "__main__":
                 'dataset/TStick_Test02_Trial1.csv',
                 'dataset/TStick_Test02_Trial2.csv']
 
-    refData = loadDataset(datasets[2])
+    refData = loadDataset(datasets[0])
+    print("Data length:", len(refData["time"]))
     #refData = loadAndroid("android_1")
     newData = refData.copy()
     
-    kf = Kalman()
-    newOrientation, residuals, covariances = kf.generateOrientationData(refData, 
-                                                                        update=True, 
-                                                                        #q_offset=np.array([0.028, -0.009, 0., 0.999])
-                                                                        )
+    kf = ESKF([#0.028, -0.009, 0., 0.999,
+               0., 0, 0, 1, # q
+               0, 0., 0
+               #3.55e-3, -2.2e-3, 9.1e-4
+              ]) # wb
+    states, residuals, covariances = kf.generateOrientationData(refData, 
+                                                                update=True, 
+                                                                #q_offset=np.array([0.028, -0.009, 0., 0.999])
+                                                                )
+
+    newOrientation = states[:, :4]
+    
+    bias = None
+    if states.shape[1] > 4:
+        bias = states[:, 4:]
 
     eulerErrors = []
     for est, true in zip(newOrientation, refData["orientation"]):
@@ -193,33 +204,35 @@ if __name__ == "__main__":
     print("Mean NDQ:", np.mean(eulerErrors))
     print("Max NDQ:", np.max(eulerErrors))
 
+    rows = 4
+    cols = 2
     if len(eulerErrors) > 0:
         plt.figure()
         
-        plt.subplot(4, 2, 1)
+        plt.subplot(rows, cols, 1)
         # plot quaternion
         plt.plot(np.array(refData["orientation"])[:, 3])
         plt.plot(newOrientation[:, 3], c="y")
         
-        plt.subplot(4, 2, 2)
+        plt.subplot(rows, cols, 2)
         plt.plot(np.array(refData["orientation"])[:, 0])
         plt.plot(newOrientation[:, 0], c="r")
         
-        plt.subplot(4, 2, 3)
+        plt.subplot(rows, cols, 3)
         plt.plot(np.array(refData["orientation"])[:, 1])
         plt.plot(newOrientation[:, 1], c="g")
         
-        plt.subplot(4, 2, 4)
+        plt.subplot(rows, cols, 4)
         plt.plot(np.array(refData["orientation"])[:, 2])
         plt.plot(newOrientation[:, 2], c="b")
         
-        plt.subplot(4, 2, 5)
+        plt.subplot(rows, cols, 5)
         plt.plot(eulerErrors)
         #plt.plot(eulerErrors[:, 0], c="b")
         #plt.plot(eulerErrors[:, 1], c="g")
         #plt.plot(eulerErrors[:, 2], c="r")
         #plt.ylim(-.05, .05)
-        plt.subplot(4, 2, 6)
+        plt.subplot(rows, cols, 6)
         #plt.plot(residuals[:, 0], c="r")
         #plt.plot(residuals[:, 1], c="g")
         #plt.plot(residuals[:, 2], c="b")
@@ -227,9 +240,14 @@ if __name__ == "__main__":
         #plt.plot([float(ay) for _, ay, _ in refData["accel"]], c="g")
         #plt.plot([float(az) for _, _, az in refData["accel"]], c="b")
 
-        plt.plot([np.linalg.norm(cov, ord=2) for cov in covariances])
+        plt.plot([np.linalg.norm(np.diag(cov)[:4], ord=2) for cov in covariances])
+        plt.plot([np.linalg.norm(np.diag(cov)[4:], ord=2) for cov in covariances])
         #plt.ylim(-.1, .1)
-
+        plt.subplot(rows, cols, 7)
+        if bias is not None:
+            plt.plot(bias[:, 0], c="r")
+            plt.plot(bias[:, 1], c="g")
+            plt.plot(bias[:, 2], c="b")
         #print(np.std([float(ax) for ax, _, _ in refData["accel"]]))
         #print(np.std([float(ay) for ay, _, _ in refData["accel"]]))
         #print(np.std([float(az) for az, _, _ in refData["accel"]]))
