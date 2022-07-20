@@ -193,9 +193,9 @@ class Kalman:
         #self.d_theta = np.array([0., 0, 0])
 
 
-        self.Qi = np.eye(3)*1.8e-5**2 # measurement/process covariance TODO: tune
+        self.Qi = np.eye(3)*1e-3**2 # measurement/process covariance TODO: tune
 
-
+        self.RR = np.eye(3)*1e-1
         #self.P = np.eye(3)*0.0005 # error covariance
         self.P = self.Qi.copy()
 
@@ -273,11 +273,9 @@ class Kalman:
         #    return (0., 0, 0)
 
         H = self.measurement_matrix(g)
-        
-        RR = np.eye(3)*0.00018#0.018 # TODO: tune
 
         num = np.matmul(self.P, H.transpose())
-        den = np.matmul(np.matmul(H, self.P), H.transpose()) + RR
+        den = np.matmul(np.matmul(H, self.P), H.transpose()) + self.RR
         den = np.linalg.inv(den)
         K = np.matmul(num, den)
 

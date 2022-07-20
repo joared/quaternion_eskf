@@ -180,7 +180,7 @@ if __name__ == "__main__":
                # ab
                0., 0., 0.
               ]) 
-    kf = Kalman()
+    #kf = Kalman()
     states, residuals, covariances = kf.generateOrientationData(refData, 
                                                                 update=True, 
                                                                 #q_offset=np.array([0.028, -0.009, 0., 0.999])
