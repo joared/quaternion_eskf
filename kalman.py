@@ -17,46 +17,61 @@ def qL(q):
                     ])
 
 class ESKF:
-    def __init__(self, init_state=None):
+    def __init__(self, 
+                 init_state, 
+                 gyro_bias=True,
+                 accel_bias=True):
         
+        # How to add state
+        # 1) Add process noise (Q_i) and initial covariance (P)
+        # 2) Modify state()
+        # 3) Modify transition_matrix() and noise_transition_matrix()
+        # 4) Modify measurement_matrix() (observation model)
+
         # Nomilan state
-        if init_state is not None:
-            self.q = np.array(init_state[:4])
-            self.wb = np.array(init_state[4:])
-        else:
-            self.q = np.array([0., 0, 0, 1])    # orientation
-            self.wb = np.array([0.0035, -0.0026, 0])      # gyro bias
+
+        self.q = np.array(init_state[:4])
+        self.wb = np.array(init_state[4:7])
+        self.ab = np.array(init_state[7:])
 
         # Error state
         #self.d_theta = np.array([0., 0, 0])
 
+        self.scale = 1
+
         theta_i = np.eye(3)*4.0e-6**2
-        ohmega_i = np.eye(3)*1.8e-6**2
-        self.Qi =  scipy.linalg.block_diag(theta_i, ohmega_i)# measurement/process covariance TODO: tune
+        ohmega_i = np.eye(3)*1.4e-6**2
+        accel_i = np.eye(3)*2.7e-6**2
+
+        self.Qi =  scipy.linalg.block_diag(theta_i, ohmega_i, accel_i)# measurement/process covariance TODO: tune
 
         #self.P = np.eye(3)*0.0005 # error covariance
-        self.P = scipy.linalg.block_diag(theta_i*1.8e3, ohmega_i*1e3) # start with initial bias value uncertain
+        self.P = scipy.linalg.block_diag(theta_i*1e1, ohmega_i*1e1, accel_i*3e2) # start with initial bias value uncertain
         
-        self.is_initialized = False
+        self.Qi *= self.scale
+        self.P *= self.scale
+        self.RR = np.eye(3)*0.00002 * self.scale
 
     def state(self):
-        return np.array(list(self.q) + list(self.wb))
+        return np.array(list(self.q) + list(self.wb) + list(self.ab))
 
     def transition_matrix(self, w, dt):
         rotmat = R.from_rotvec((w-self.wb)*dt).as_matrix().transpose()
 
         # TODO: with bias
-        trans_matrix = np.zeros((6,6))
+        trans_matrix = np.eye(9)
         trans_matrix[:3, :3] = rotmat
-        trans_matrix[:3, 3:7] = -np.eye(3)*dt
-        trans_matrix[3:7, 3:7] = np.eye(3)
-
+        trans_matrix[:3, 3:6] = -np.eye(3)*dt
+        #trans_matrix[3:6, 3:6] = np.eye(3)
+        #trans_matrix[6:9, 6:9] = np.eye(3)
+        #print(np.diag(trans_matrix))
+        
         return trans_matrix
 
     def noise_transition_matrix(self):
         # TODO: with bias
         # return np.eye(6)
-        return np.eye(6)
+        return np.eye(9)
 
     def measurement_matrix(self, g, dt):
         rvec = R.from_quat(self.q).as_rotvec()
@@ -71,10 +86,11 @@ class ESKF:
 
         Hq = skew(np.matmul(rotmat.transpose(), g))
 
-        H = np.zeros((3,6))
+        H = np.zeros((3,9))
         H[:, :3] = Hq
-        H[:, 3:] = -Hq
-
+        H[:, 3:6] = -Hq
+        H[:, 6:] = -rotmat.transpose()
+        
         return H
 
     def predict(self, w, dt):
@@ -96,39 +112,38 @@ class ESKF:
             print("Ignoring uncertain accel measurement")
             return (0., 0, 0)
         a = a / a_norm
+
         g = np.array([0, 0, 1.])
-    
-        a_thresh = 10
-        #if np.linalg.norm(a) > 9.82+a_thresh or np.linalg.norm(a) < 9.82-a_thresh:
-        #    print("Ignoring outlier")
-        #    return (0., 0, 0)
 
         H = self.measurement_matrix(g, dt)
-        
-        #RR = np.eye(3)*0.0018 # accel
-        RR = np.eye(3)*0.00004 # accel
 
         num = np.matmul(self.P, H.transpose())
-        den = np.matmul(np.matmul(H, self.P), H.transpose()) + RR
+        den = np.matmul(np.matmul(H, self.P), H.transpose()) + self.RR
         den = np.linalg.inv(den)
         K = np.matmul(num, den)
 
         # TODO: reset of d_theta (G*P*G^T)
         self.P = self.P - np.matmul(np.matmul(K, H), self.P)
 
-        residual = a - R.from_quat(self.q).inv().apply(g)
+        residual = a - R.from_quat(self.q).inv().apply(g-self.ab)
 
         d_x = np.matmul(K, residual)
-        d_theta, d_bias = d_x[:3], d_x[3:]
-        self.wb += d_bias
+        d_theta, d_bias, d_accel_bias = d_x[:3], d_x[3:6], d_x[6:] 
 
         rot = R.from_quat(self.q) * R.from_quat(list((d_theta)/2.0) + [1])
         self.q = rot.as_quat()
+
+        #print(self.q)
+        #print(np.linalg.norm(self.q))
+
+        self.wb += d_bias
+        
+        self.ab += d_accel_bias
         
         #print(self.wb)
         return residual
 
-    def generateOrientationData(self, data, predict=True, update=True, q_offset=None):
+    def generateOrientationData(self, data, update=True, q_offset=None):
         orientations = []
         covariances = []
         residuals = []

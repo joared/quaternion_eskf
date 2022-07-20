@@ -158,22 +158,29 @@ class CubeAnimation:
 
 if __name__ == "__main__":
     datasets = ['dataset/TStick_Test01_Static.csv',
+                'dataset/TStick_Test02_Trial1.csv',
+                'dataset/TStick_Test02_Trial2.csv',
                 'dataset/TStick_Test11_Trial1.csv',
                 'dataset/TStick_Test11_Trial2.csv',
-                'dataset/TStick_Test11_Trial3.csv',
-                'dataset/TStick_Test02_Trial1.csv',
-                'dataset/TStick_Test02_Trial2.csv']
+                'dataset/TStick_Test11_Trial3.csv'
+                ]
 
-    refData = loadDataset(datasets[0])
+    refData = loadDataset(datasets[1])
     print("Data length:", len(refData["time"]))
     #refData = loadAndroid("android_1")
     newData = refData.copy()
     
-    kf = ESKF([#0.028, -0.009, 0., 0.999,
-               0., 0, 0, 1, # q
-               0, 0., 0
-               #3.55e-3, -2.2e-3, 9.1e-4
-              ]) # wb
+    kf = ESKF([
+               # q
+               #0.028, -0.009, 0., 0.999,
+               0., 0, 0, 1, 
+               # wb
+               0, 0., 0,
+               #3.55e-3, -2.2e-3, 9.1e-4,
+               # ab
+               0., 0., 0.
+              ]) 
+    kf = Kalman()
     states, residuals, covariances = kf.generateOrientationData(refData, 
                                                                 update=True, 
                                                                 #q_offset=np.array([0.028, -0.009, 0., 0.999])
@@ -182,8 +189,11 @@ if __name__ == "__main__":
     newOrientation = states[:, :4]
     
     bias = None
+    accel_bias = None
     if states.shape[1] > 4:
-        bias = states[:, 4:]
+        bias = states[:, 4:7]
+    if states.shape[1] > 7:
+        accel_bias = states[:, 7:11]
 
     eulerErrors = []
     for est, true in zip(newOrientation, refData["orientation"]):
@@ -240,14 +250,21 @@ if __name__ == "__main__":
         #plt.plot([float(ay) for _, ay, _ in refData["accel"]], c="g")
         #plt.plot([float(az) for _, _, az in refData["accel"]], c="b")
 
-        plt.plot([np.linalg.norm(np.diag(cov)[:4], ord=2) for cov in covariances])
-        plt.plot([np.linalg.norm(np.diag(cov)[4:], ord=2) for cov in covariances])
+        plt.plot([np.linalg.norm(np.diag(cov)[:3], ord=2) for cov in covariances])
+        plt.plot([np.linalg.norm(np.diag(cov)[3:6], ord=2) for cov in covariances])
+        plt.plot([np.linalg.norm(np.diag(cov)[6:9], ord=2) for cov in covariances])
         #plt.ylim(-.1, .1)
         plt.subplot(rows, cols, 7)
         if bias is not None:
             plt.plot(bias[:, 0], c="r")
             plt.plot(bias[:, 1], c="g")
             plt.plot(bias[:, 2], c="b")
+
+        plt.subplot(rows, cols, 8)
+        if accel_bias is not None:
+            plt.plot(accel_bias[:, 0], c="r")
+            plt.plot(accel_bias[:, 1], c="g")
+            plt.plot(accel_bias[:, 2], c="b")
         #print(np.std([float(ax) for ax, _, _ in refData["accel"]]))
         #print(np.std([float(ay) for ay, _, _ in refData["accel"]]))
         #print(np.std([float(az) for az, _, _ in refData["accel"]]))
