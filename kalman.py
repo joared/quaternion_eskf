@@ -78,7 +78,6 @@ class ESKF:
 
         # ESKF reset
         G = np.eye(3) - Q.skew(0.5 * d_theta)
-        #G = Q.rodrigues(-d_theta/2.0)
         self.P = np.matmul(np.matmul(G, self.P), G.transpose())
 
         return residual
