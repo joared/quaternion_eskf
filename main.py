@@ -135,6 +135,7 @@ if __name__ == "__main__":
 
         # Plot errors
         plt.plot(t, error_norms)
+        plt.title("Angular errors")
         if args.update:
             states_noupdate, _, _ = kf.generateOrientationData(refData, update=False)
             newOrientation_noupdate = states_noupdate[:, :4]
@@ -146,8 +147,9 @@ if __name__ == "__main__":
         
         plt.ylim(-1, 1)
         plt.xlabel("sec")
+        plt.ylabel("rad")
 
-        # Plot covariances
+        # Plot local/global covariances
         rotated_covariances = []
         for s, cov in zip(states, covariances):
             rotmat = Q.quat_to_matrix(s)
@@ -156,8 +158,10 @@ if __name__ == "__main__":
 
         fig = plt.figure()
         plt.subplot(1, 2, 1)
+        plt.title("Local covariance")
         plt.plot([np.diag(cov) for cov in covariances])
         plt.subplot(1, 2, 2)
+        plt.title("Global covariance")
         plt.plot([np.diag(cov) for cov in rotated_covariances])
 
         # Plot quaternions components and quaternion error
@@ -165,6 +169,7 @@ if __name__ == "__main__":
         fig.set_tight_layout(True)
 
         plt.subplot(rows, cols, 1)
+        plt.title("Quaternion components, update {}".format("on" if args.update else "off"))
         plt.plot(t, error_quats[:, 0], linewidth=linewidth, c=c_err)
         plt.plot(t, newOrientation[:, 0], marker_est, linewidth=linewidth, c=c_est)
         plt.plot(t, np.array(refData["orientation"])[:, 0], marker_true, linewidth=linewidth, c=c_true)
