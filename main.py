@@ -1,34 +1,82 @@
 import matplotlib.pyplot as plt
 from cube import Cube
-from kalman import Kalman, ESKF
+from kalman import ESKF, ESKFG
 from coordinate_system import CoordinateSystemArtist, CoordinateSystem
 
 import numpy as np
 from scipy.spatial.transform import Rotation as R
 import matplotlib.animation as animation
 import time
-from loaddata import loadAndroid
+from loaddata import loadAndroid, loadDataset, load_sensorstream, load_custom
 
-def loadDataset(filename):
-    import csv
-    data = {"time": [],
-            "orientation": [],
-            "accel": [],
-            "gyro": [],
-            "magnetometer": []}
+def analyze_sensor_data(data):
+    g_data = np.array(data["gyro"])
+    a_data = np.array(data["accel"])
 
-    with open(filename, newline='') as csvfile:
-        reader = csv.reader(csvfile, delimiter=',', quotechar='|')
-        for i, row in enumerate(reader):
-            if i > 1:
-                data["time"].append(float(row[0]))
-                orientation = list(map(float, row[2:5])) + [float(row[1])]
-                data["orientation"].append(orientation)
-                data["accel"].append(list(map(float, row[5:8])))
-                data["gyro"].append(list(map(float, row[8:11])))
-                data["magnetometer"].append(list(map(float, row[11:14])))
+    g_mean = np.mean(g_data, axis=0)
+    g_std = np.std(g_data, axis=0)
+    g_var = np.std(g_data, axis=0)
+
+    dt = .01
+    print("STD:", g_std)
+
+    a_mean = np.mean(a_data, axis=0)
+    a_std = np.std(a_data, axis=0)
+
+    print("Gyro mean:", g_mean)
+    print("Gyro std:", g_std)
+    print("Accel mean:", a_mean)
+    print("Accel std:", a_std)
+
     
-    return data
+    plt.subplot(2, 3, 1)
+    plt.plot(g_data[:, 0], c="r")
+    plt.subplot(2, 3, 2)
+    plt.plot(g_data[:, 1], c="g")
+    plt.subplot(2, 3, 3)
+    plt.plot(g_data[:, 2], c="b")
+    plt.subplot(2, 3, 4)
+    plt.plot(a_data[:, 0], c="r")
+    plt.subplot(2, 3, 5)
+    plt.plot(a_data[:, 1], c="g")
+    plt.subplot(2, 3, 6)
+    plt.plot(a_data[:, 2], c="b")
+    plt.show()
+
+    return g_mean, g_std, a_mean, a_std
+
+def calc_orientation_error(refOrientation, estOrientation):
+    error_quats = []
+    error_norms = []
+    error_ndq = []
+    for est, true in zip(estOrientation, refOrientation):
+        #eulerErrors.append(np.linalg.norm(true-est))
+        err_quat = list(np.array(true) - np.array(est))
+
+        est_inv = R.from_quat(list(-est[:3]) + [est[3]])
+        true = R.from_quat(true)
+        
+        err = true*est_inv
+        q = err.as_quat()
+        
+        # 1/2 * Geodesic on the unit sphere
+        #v = q[:3]
+        #dq = q[3]
+        #theta = np.arctan2(np.linalg.norm(v), dq)
+
+        # Geodesic on the unit sphere
+        theta = np.linalg.norm(err.as_rotvec())
+
+        error_quats.append(err_quat)
+        error_ndq.append(np.linalg.norm(err_quat))
+        error_norms.append(theta)
+
+    error_norms = np.array(error_norms)
+    error_quats = np.array(error_quats)
+    error_ndq = np.array(error_ndq)
+
+    return error_norms, error_ndq, error_quats
+
 
 class CSAnimation:
     def __init__(self):
@@ -72,8 +120,12 @@ class CSAnimation:
             self.startTime = time.time()
         self.elapsed = time.time() - self.startTime
 
-        dt = float(self.data["time"][1]) - float(self.data["time"][0])
-        closestIndex = min(int(self.elapsed/dt), len(self.data["time"])-1)
+        #dt = float(self.data["time"][1]) - float(self.data["time"][0])
+        #closestIndex = min(int(self.elapsed/dt), len(self.data["time"])-1)
+        # new
+        closestIndex = np.argmin(abs(np.array(self.data["time"], dtype=np.float32) - self.elapsed))
+        closestIndex = min(closestIndex, len(self.data["time"])-1)
+
         self.ax.set_title("fps: {}, time: {}/{}".format(round(i/self.elapsed), round(float(self.data["time"][closestIndex]), 1), round(float(self.data["time"][-1]))))
         
         #closestIndex = i
@@ -139,8 +191,12 @@ class CubeAnimation:
             self.startTime = time.time()
         self.elapsed = time.time() - self.startTime
 
+        # old
         dt = float(self.data["time"][1]) - float(self.data["time"][0])
         closestIndex = min(int(self.elapsed/dt), len(self.data["time"])-1)
+        # new
+        #closestIndex = np.argmin(abs(np.array(self.data["time"], dtype=np.float32) - self.elapsed))
+
         self.ax.set_title("fps: {}, time: {}/{}".format(round(i/self.elapsed), round(float(self.data["time"][closestIndex]), 1), round(float(self.data["time"][-1]))))
         
         #closestIndex = i
@@ -157,6 +213,25 @@ class CubeAnimation:
         return self.cube.update(i)
 
 if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser(description='Process some integers.')
+    parser.add_argument('dataset', help='Dataset (1-6 or custom)')
+    parser.add_argument('--update', "-u", help='Enable accelerometer update', action='store_true')
+
+    args = parser.parse_args()
+    custom = False
+    dataset_idx = None
+    try:
+        dataset_idx = int(args.dataset)-1
+    except:
+        if args.dataset == "custom":
+            custom = True
+        else:
+            raise Exception("Invalid dataset '{}'".format(args.dataset))
+    else:
+        assert 0 <= dataset_idx <= 5, "Dataset has to be 1-6 (or custom)"
+
     datasets = ['dataset/TStick_Test01_Static.csv',
                 'dataset/TStick_Test02_Trial1.csv',
                 'dataset/TStick_Test02_Trial2.csv',
@@ -165,94 +240,155 @@ if __name__ == "__main__":
                 'dataset/TStick_Test11_Trial3.csv'
                 ]
 
-    refData = loadDataset(datasets[1])
+    if custom:
+        dataset = "own_dataset/rec4.csv", "own_dataset/rec4.log"
+        loader = load_custom # loadDataset
+    else:
+        dataset = (datasets[dataset_idx],)
+        loader = loadDataset
+
+    refData = loader(*dataset)
     print("Data length:", len(refData["time"]))
-    #refData = loadAndroid("android_1")
+
+    g_mean, g_std, a_mean, a_std = analyze_sensor_data(refData)
+    
     newData = refData.copy()
     
-    kf = ESKF([
+    q_init = refData["orientation"][0]
+    kf = ESKFG([
                # q
                #0.028, -0.009, 0., 0.999,
-               0., 0, 0, 1, 
+               q_init[0], q_init[1], q_init[2], q_init[3], 
                # wb
                0, 0., 0,
-               #3.55e-3, -2.2e-3, 9.1e-4,
+               #0.00367097, -0.00232872, 0.00098314,
                # ab
+               #-0.01191148, 0.19411188, 0
                0., 0., 0.
               ]) 
-    #kf = Kalman()
-    states, residuals, covariances = kf.generateOrientationData(refData, 
-                                                                update=True, 
-                                                                #q_offset=np.array([0.028, -0.009, 0., 0.999])
-                                                                )
-
+    kf = ESKF(q_init)
+    states, residuals, covariances, update_on = kf.generateOrientationData(refData, update=args.update)
     newOrientation = states[:, :4]
-    
-    bias = None
-    accel_bias = None
-    if states.shape[1] > 4:
-        bias = states[:, 4:7]
-    if states.shape[1] > 7:
-        accel_bias = states[:, 7:11]
-
-    eulerErrors = []
-    for est, true in zip(newOrientation, refData["orientation"]):
-        #est = R.from_quat(est)
-        #true = R.from_quat(true)
-        
-        #err = true.inv()*est
-        eulerErrors.append(np.linalg.norm(true-est))
-        #eulerErrors.append(err.as_euler("ZYX"))
-
-    eulerErrors = np.array(eulerErrors)
-    
-    #refData["orientation"] = newOrientation
+    error_norms, error_ndq, error_quats = calc_orientation_error(refData["orientation"], newOrientation)
 
     print("Est. state:", kf.q)
     print("Ref. orientation:", refData["orientation"][-1])
     newData["orientation"] = newOrientation
-    print("Mean NDQ:", np.mean(eulerErrors))
-    print("Max NDQ:", np.max(eulerErrors))
+    print("Mean err:", np.mean(error_norms))
+    print("Max err:", np.max(error_norms))
+    print("Mean NDQ:", np.mean(error_ndq))
+    print("Max NDQ:", np.max(error_ndq))
 
-    rows = 4
+    bias = None
+    accel_bias = None
+    gravity = None
+    accel_offset = None
+    if states.shape[1] > 4:
+        bias = states[:, 4:7]
+    if states.shape[1] > 7:
+        accel_bias = states[:, 7:10]
+    if states.shape[1] > 11:
+        gravity = states[:, 10:13]
+    if states.shape[1] > 14:
+        accel_offset = states[:, 13:16]
+
+    rows = 2
     cols = 2
-    if len(eulerErrors) > 0:
-        plt.figure()
+    linewidth = 1.5
+    marker_true = "--"
+    marker_est = "-"
+    c_true = "g"
+    c_est = "r"
+    c_err = "y"
+    lim = 1.05
+
+    if len(error_norms) > 0:
+        t = refData["time"]
+
+        # Plot errors
+        #fig = plt.figure()
+        #plt.plot([np.linalg.norm(r) for r in residuals])
+        fig = plt.figure()
+        plt.plot(t, error_norms)
+        if args.update:
+            states_noupdate, _, _, _ = kf.generateOrientationData(refData, update=False)
+            newOrientation_noupdate = states_noupdate[:, :4]
+            error_norms_noupdate, _, _ = calc_orientation_error(refData["orientation"], newOrientation_noupdate)
+            plt.plot(t, error_norms_noupdate)
+            plt.legend([r"$|\Delta \theta|$ update", r"$|\Delta \theta|$"])
+        else:
+            plt.legend([r"$|\Delta \theta|$"])
         
+        plt.ylim(-1, 1)
+        plt.xlabel("sec")
+
+        # Plot covariances
+        rotated_covariances = []
+        for s, cov in zip(states, covariances):
+            rotmat = R.from_quat(s).as_matrix()
+            r_cov = np.matmul(np.matmul(rotmat, cov), rotmat.transpose())
+            rotated_covariances.append(r_cov)
+
+        fig = plt.figure()
+        plt.subplot(1, 2, 1)
+        plt.plot([np.diag(cov) for cov in covariances])
+        plt.subplot(1, 2, 2)
+        plt.plot([np.diag(cov) for cov in rotated_covariances])
+
+        # Plot quaternions components and quaternion error
+        fig = plt.figure(figsize=(12, 10))
+        fig.set_tight_layout(True)
+
         plt.subplot(rows, cols, 1)
-        # plot quaternion
-        plt.plot(np.array(refData["orientation"])[:, 3])
-        plt.plot(newOrientation[:, 3], c="y")
-        
+        plt.plot(t, error_quats[:, 0], linewidth=linewidth, c=c_err)
+        plt.plot(t, newOrientation[:, 0], marker_est, linewidth=linewidth, c=c_est)
+        plt.plot(t, np.array(refData["orientation"])[:, 0], marker_true, linewidth=linewidth, c=c_true)
+        plt.legend([r"$Error \; q_x$", r"$Est \; q_x$", r"$True \; q_x$"])
+        plt.xlabel("sec")
+        plt.ylim(-lim, lim)
+
         plt.subplot(rows, cols, 2)
-        plt.plot(np.array(refData["orientation"])[:, 0])
-        plt.plot(newOrientation[:, 0], c="r")
-        
+        plt.plot(t, error_quats[:, 1], linewidth=linewidth, c=c_err)
+        plt.plot(t, newOrientation[:, 1], marker_est, linewidth=linewidth, c=c_est)
+        plt.plot(t, np.array(refData["orientation"])[:, 1], marker_true, linewidth=linewidth, c=c_true)
+        plt.legend([r"$Error \; q_y$", r"$Est \; q_y$", r"$True \; q_y$"])
+        plt.xlabel("sec")
+        plt.ylim(-lim, lim)
+
         plt.subplot(rows, cols, 3)
-        plt.plot(np.array(refData["orientation"])[:, 1])
-        plt.plot(newOrientation[:, 1], c="g")
-        
+        plt.plot(t, error_quats[:, 2], linewidth=linewidth, c=c_err)
+        plt.plot(t, newOrientation[:, 2], marker_est, linewidth=linewidth, c=c_est)
+        plt.plot(t, np.array(refData["orientation"])[:, 2], marker_true, linewidth=linewidth, c=c_true)
+        plt.legend([r"$Error \; q_z$", r"$Est \; q_z$", r"$True \; q_z$"])
+        plt.xlabel("sec")
+        plt.ylim(-lim, lim)
+                
         plt.subplot(rows, cols, 4)
-        plt.plot(np.array(refData["orientation"])[:, 2])
-        plt.plot(newOrientation[:, 2], c="b")
-        
+        # plot quaternion
+        plt.plot(t, error_quats[:, 3], linewidth=linewidth, c=c_err)
+        plt.plot(t, newOrientation[:, 3], marker_est, linewidth=linewidth, c=c_est)
+        plt.plot(t, np.array(refData["orientation"])[:, 3], marker_true, linewidth=linewidth, c=c_true)
+        plt.legend([r"$Error \; q_w$", r"$Est \; q_w$", r"$True \; q_w$"])
+        plt.xlabel("sec")
+        plt.ylim(-lim, lim)
+
+        #plt.tight_layout(pad=0, h_pad=0, w_pad=0)
+
+        """
         plt.subplot(rows, cols, 5)
-        plt.plot(eulerErrors)
-        #plt.plot(eulerErrors[:, 0], c="b")
-        #plt.plot(eulerErrors[:, 1], c="g")
-        #plt.plot(eulerErrors[:, 2], c="r")
-        #plt.ylim(-.05, .05)
+        plt.plot(error_vecs)
+        plt.ylim(-.1, .1)
+
         plt.subplot(rows, cols, 6)
-        #plt.plot(residuals[:, 0], c="r")
-        #plt.plot(residuals[:, 1], c="g")
-        #plt.plot(residuals[:, 2], c="b")
-        #plt.plot([float(ax) for ax, _, _ in refData["accel"]], c="r")
-        #plt.plot([float(ay) for _, ay, _ in refData["accel"]], c="g")
-        #plt.plot([float(az) for _, _, az in refData["accel"]], c="b")
+        #plt.plot([cov[0,0] for cov in covariances], c="r")
+        #plt.plot([cov[1,1] for cov in covariances], c="g")
+        #plt.plot([cov[2,2] for cov in covariances], c="b")
 
         plt.plot([np.linalg.norm(np.diag(cov)[:3], ord=2) for cov in covariances])
-        plt.plot([np.linalg.norm(np.diag(cov)[3:6], ord=2) for cov in covariances])
-        plt.plot([np.linalg.norm(np.diag(cov)[6:9], ord=2) for cov in covariances])
+        #plt.plot([np.linalg.norm(np.diag(cov)[3:6], ord=2) for cov in covariances])
+        #plt.plot([np.linalg.norm(np.diag(cov)[6:9], ord=2) for cov in covariances])
+        #plt.plot([np.linalg.norm(np.diag(cov)[9:12], ord=2) for cov in covariances])
+        #plt.plot([np.linalg.norm(np.diag(cov)[12:15], ord=2) for cov in covariances])
         #plt.ylim(-.1, .1)
         plt.subplot(rows, cols, 7)
         if bias is not None:
@@ -260,16 +396,33 @@ if __name__ == "__main__":
             plt.plot(bias[:, 1], c="g")
             plt.plot(bias[:, 2], c="b")
 
+        plt.ylim(-.01, 0.01)
+
         plt.subplot(rows, cols, 8)
         if accel_bias is not None:
             plt.plot(accel_bias[:, 0], c="r")
             plt.plot(accel_bias[:, 1], c="g")
             plt.plot(accel_bias[:, 2], c="b")
-        #print(np.std([float(ax) for ax, _, _ in refData["accel"]]))
-        #print(np.std([float(ay) for ay, _, _ in refData["accel"]]))
-        #print(np.std([float(az) for az, _, _ in refData["accel"]]))
+        #plt.ylim(-.5, 0.5)
+
+        plt.subplot(rows, cols, 9)
+        if gravity is not None:
+            plt.plot(gravity[:, 0], c="r")
+            plt.plot(gravity[:, 1], c="g")
+            plt.plot(gravity[:, 2], c="b")
+        #plt.ylim(-10, 0.5)
+        
+        plt.subplot(rows, cols, 10)
+        if accel_offset is not None:
+            plt.plot(accel_offset[:, 0], c="r")
+            plt.plot(accel_offset[:, 1], c="g")
+            plt.plot(accel_offset[:, 2], c="b")
+        #plt.plot(update_on)
+        #plt.ylim(-2, 2)
+        """
         plt.show()
 
     cani = CSAnimation()
+    #cani = CubeAnimation()
     cani.animateDataset(newData, refData)
     cani.show()
