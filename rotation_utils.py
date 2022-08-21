@@ -4,6 +4,9 @@ import numpy as np
 def quat_norm(q):
     return q / np.linalg.norm(q)
 
+def quat_inv(q):
+    return np.array(list(-q[:3]) + [q[3]])
+
 def qL(q):
     qx, qy, qz, qw = q
     return np.array([[qw, -qz, qy, qx],
@@ -27,6 +30,22 @@ def exp_quat(w):
 def rotvec_to_quat(w):
     # Capitalized exponential map to S3
     return exp_quat(0.5 * w)
+
+def quat_to_rotvec(q):
+    qv = q[:3]
+    qv_norm = np.linalg.norm(qv)
+    qw = q[3]
+
+    if qv_norm == 0:
+        w_hat = np.array([0., 0., 0.])
+        theta = 0
+    else:
+        w_hat = qv / qv_norm
+        theta = 2*np.arctan(qv_norm / qw)
+    
+    w = w_hat*theta
+    
+    return w
 
 def quat_to_matrix(q):
     qw = q[3]
@@ -72,6 +91,11 @@ if __name__ == "__main__":
     q_test = exp_quat(0.5 * w)
     q_true = r2.as_quat()
     assert np.allclose(q_test, q_true, atol=epsilon), "exp_quat failed"
+    
+    # Test quat_to_rotvec
+    w_est = quat_to_rotvec(r1.as_quat())
+    w_true = r1.as_rotvec()
+    assert np.allclose(w_est, w_true, atol=epsilon), "quat_to_rotvec failed"
     
     # Test quat_to_matrix
     rotmat_test = quat_to_matrix(r1.as_quat())

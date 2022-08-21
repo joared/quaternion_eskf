@@ -1,5 +1,8 @@
 from scipy.spatial.transform import Rotation as R
+import matplotlib.pyplot as plt
+import matplotlib.animation as animation
 import numpy as np
+import time
 
 class CoordinateSystem:
     # https://stackoverflow.com/questions/11140163/plotting-a-3d-cube-a-sphere-and-a-vector-in-matplotlib
@@ -97,3 +100,64 @@ class CoordinateSystemArtist:
             self.zAxis.set_data_3d([], [], [])
 
         return self.artists()
+
+class CSAnimation:
+    def __init__(self):
+        pass
+
+    def animateDataset(self, data, reference_data):
+        self.data = data
+        self.ref_data = reference_data
+        self.fig = plt.figure()
+
+        self.ax = self.fig.gca(projection='3d')
+        ax = self.ax
+        ax.clear()
+        self.cs = CoordinateSystemArtist(CoordinateSystem(translation=(0., -1, 0)))
+        self.ref_cs = CoordinateSystemArtist(CoordinateSystem(translation=(0., 1, 0)))
+
+        size = 2
+        ax.set_xlim3d(-size, size)
+        ax.set_ylim3d(-size, size)
+        ax.set_zlim3d(-size, size)
+
+        self.startTime = 0
+        self.elaspsed = 0
+
+        # need to store FuncAnimation otherwise it doesn't work
+        self.anim = animation.FuncAnimation(self.fig, self.animate, frames=self.timeGen, init_func=self.init,
+                                       interval=100, blit=True)
+
+    def show(self):
+        plt.show()
+
+    def init(self):
+        return self.cs.init(self.ax) + self.ref_cs.init(self.ax)
+
+    def timeGen(self):
+        for i in range(len(self.data["time"])):
+            yield i
+
+    def animate(self, i):
+        if i == 0:
+            self.startTime = time.time()
+        self.elapsed = time.time() - self.startTime
+
+        #dt = float(self.data["time"][1]) - float(self.data["time"][0])
+        #closestIndex = min(int(self.elapsed/dt), len(self.data["time"])-1)
+        # new
+        closestIndex = np.argmin(abs(np.array(self.data["time"], dtype=np.float32) - self.elapsed))
+        closestIndex = min(closestIndex, len(self.data["time"])-1)
+
+        self.ax.set_title("fps: {}, time: {}/{}".format(round(i/self.elapsed), round(float(self.data["time"][closestIndex]), 1), round(float(self.data["time"][-1]))))
+        
+        #closestIndex = i
+        #self.ax.set_title("Frame: {}".format(i))
+        
+        self.cs.cs.rotation = R.from_quat(self.data["orientation"][closestIndex]).as_matrix()
+
+        self.ref_cs.cs.rotation = R.from_quat(self.ref_data["orientation"][closestIndex]).as_matrix()
+        
+        self.fig.canvas.draw() # bug fix
+        
+        return self.cs.update(i) + self.ref_cs.update(i)
