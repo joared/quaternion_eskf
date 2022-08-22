@@ -1,5 +1,4 @@
 import csv
-from scipy.spatial.transform import Rotation as R
 import numpy as np
     
 
@@ -10,7 +9,6 @@ def load_custom(groundtruthfile, sensorfile):
             "gyro": [],
             "magnetometer": []}
 
-    init_q = None
     with open(groundtruthfile, newline='') as csvfile:
         reader = csv.reader(csvfile, delimiter=',')
         for i, row in enumerate(reader):
@@ -19,14 +17,11 @@ def load_custom(groundtruthfile, sensorfile):
                 if row[2]:
                     
                     q = list(map(float, row[2:6]))
-                    #q = [-q[0], q[2], q[3], -q[1]] # re-arange quaternion
+
+                    # re-arange quaternion components
                     q = [q[3], q[0], q[1], q[2]]
                     q = [q[1], -q[3], -q[0], q[2]]
-                    #if init_q is None:
-                    #    init_q = q
 
-                    #rot = R.from_quat(init_q).inv()*R.from_quat(q)
-                    #q = rot.as_quat()
                     data["orientation"].append(q)
                 else:
                     data["orientation"].append(data["orientation"][-1])
@@ -44,7 +39,7 @@ def load_custom(groundtruthfile, sensorfile):
                 gyro *= np.pi/180
                 data["gyro"].append(list(gyro))
 
-    
+    # Align/synchronize time
     temp = 0
     start = 3158 +temp
     end = 6688 + temp
@@ -52,14 +47,10 @@ def load_custom(groundtruthfile, sensorfile):
     data["gyro"] = data["gyro"][start:end]
     l_s = len(data["accel"])
 
-    pad = 200 # 200
-
+    pad = 200
     data["time"] = data["time"][1999:5629+pad]
     data["orientation"] = data["orientation"][1999:5629+pad]
     l_q = len(data["time"])
-
-    #print("Time elapsed:")
-    #print(data["time"][-1] - data["time"][0])
 
     c = l_q/l_s
 
@@ -69,7 +60,6 @@ def load_custom(groundtruthfile, sensorfile):
     for index in range(l_s):
         time_arr.append(data["time"][int(index*c)])
         orientation_arr.append(data["orientation"][int(index*c)])
-
 
     data["time"] = list(np.array(time_arr)-time_arr[0])
     data["orientation"] = orientation_arr

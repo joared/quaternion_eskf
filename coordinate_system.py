@@ -1,4 +1,4 @@
-from scipy.spatial.transform import Rotation as R
+import rotation_utils as Q
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 import numpy as np
@@ -102,8 +102,8 @@ class CSAnimation:
 
         self.ax.set_title("fps: {}, time: {}/{} sec".format(round(i/self.elapsed), round(float(self.data["time"][closestIndex]), 1), round(float(self.data["time"][-1]), 1)))
         
-        self.cs.update_rotation(R.from_quat(self.data["orientation"][closestIndex]).as_matrix())
-        self.ref_cs.update_rotation(R.from_quat(self.ref_data["orientation"][closestIndex]).as_matrix())
+        self.cs.update_rotation(Q.quat_to_matrix(np.array(self.data["orientation"][closestIndex])))
+        self.ref_cs.update_rotation(Q.quat_to_matrix(np.array(self.ref_data["orientation"][closestIndex])))
         
         self.fig.canvas.draw() # bug fix
         
