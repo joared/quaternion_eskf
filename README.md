@@ -9,7 +9,7 @@ where \<dataset\> is (1-6, or custom). Adding the --update option will enable th
 
 - Sensor data will be plotted, and sensor mean and average will be printed. Close window to continue.
 
-    <img src="plots/example_sensor.png" alt="sensor" width="218.5"/>
+    <img src="plots/example_sensor.png" alt="sensor" width="250"/>
 
 - Quaternion components (true, estimated, error), angular errors and diagonal components of (local/global) covariance will be plotted. The quaternion components will be shown with the update step if  the --update option is given. Angular errors is shown with and without the update step if the --update option is given. Close windows to continue.
 
@@ -19,4 +19,4 @@ where \<dataset\> is (1-6, or custom). Adding the --update option will enable th
 
 - A 3D visualization will be displayed, with the estimated and true orientation. 
 
-    <img src="plots/example_3D.png" alt="3D" width="218.5"/>
+    <img src="plots/example_3D.png" alt="3D" width="300"/>
