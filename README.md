@@ -1,5 +1,5 @@
 # quaternion_eskf
-Orientation estimation using quaternions and the Error State Kalman Filter (ESKF)
+Orientation estimation using quaternions and the Error State Kalman Filter (ESKF). For detailed explanation of the implementation, see quaternion_eskf.pdf.
 
 ## Run the ESKF
 
