@@ -75,36 +75,38 @@ if __name__ == "__main__":
     from scipy.spatial.transform import Rotation as R
     epsilon = sys.float_info.epsilon
 
-    r1 = R.from_rotvec([0.1, 0.4, -0.654])
+    r11 = R.from_rotvec([1e-10]*3)
+    r12 = R.from_rotvec([0.1, 0.4, -0.654])
     w = np.array([-0.3, 0.2, -0.145])
     r2 = R.from_rotvec(w)
     
-    # Test qL
+    for r1 in (r11, r12):
+        # Test qL
 
-    # Test quat_mul
-    q_test = quat_mult(r1.as_quat(), r2.as_quat())
-    r_true = r1*r2
-    q_true = r_true.as_quat()
-    assert np.allclose(q_test, q_true, atol=epsilon), "qL failed"
-    
-    # Test exp_quat
-    q_test = exp_quat(0.5 * w)
-    q_true = r2.as_quat()
-    assert np.allclose(q_test, q_true, atol=epsilon), "exp_quat failed"
-    
-    # Test quat_to_rotvec
-    w_est = quat_to_rotvec(r1.as_quat())
-    w_true = r1.as_rotvec()
-    assert np.allclose(w_est, w_true, atol=epsilon), "quat_to_rotvec failed"
-    
-    # Test quat_to_matrix
-    rotmat_test = quat_to_matrix(r1.as_quat())
-    rotmat_true = r1.as_matrix()
-    assert np.allclose(rotmat_test, rotmat_true, atol=epsilon), "quat_to_matrix failed"
+        # Test quat_mul
+        q_test = quat_mult(r1.as_quat(), r2.as_quat())
+        r_true = r1*r2
+        q_true = r_true.as_quat()
+        assert np.allclose(q_test, q_true, atol=epsilon), "qL failed"
+        
+        # Test exp_quat
+        q_test = exp_quat(0.5 * w)
+        q_true = r2.as_quat()
+        assert np.allclose(q_test, q_true, atol=epsilon), "exp_quat failed"
+        
+        # Test quat_to_rotvec
+        w_est = quat_to_rotvec(r1.as_quat())
+        w_true = r1.as_rotvec()
+        assert np.allclose(w_est, w_true, atol=epsilon), "quat_to_rotvec failed"
+        
+        # Test quat_to_matrix
+        rotmat_test = quat_to_matrix(r1.as_quat())
+        rotmat_true = r1.as_matrix()
+        assert np.allclose(rotmat_test, rotmat_true, atol=epsilon), "quat_to_matrix failed"
 
-    # Test rodrigues
-    rotmat_test = rodrigues(w)
-    rotmat_true = r2.as_matrix()
-    assert np.allclose(rotmat_test, rotmat_true, atol=epsilon), "rodrigues failed"
+        # Test rodrigues
+        rotmat_test = rodrigues(w)
+        rotmat_true = r2.as_matrix()
+        assert np.allclose(rotmat_test, rotmat_true, atol=epsilon), "rodrigues failed"
 
-    # Test skew
+        # Test skew

@@ -47,12 +47,14 @@ class CoordinateSystem:
         return list(newPoints)
 
 class CoordinateSystemArtist:
-    def __init__(self, coordinateSystem=None, scale=1):
+    def __init__(self, coordinateSystem=None, scale=1, text=None):
         self.cs = coordinateSystem if coordinateSystem else CoordinateSystem()
         self.scale = scale
         self.xAxis = None
         self.yAxis = None
         self.zAxis = None
+        self.text_artist = None
+        self.text = text
 
     def draw(self, ax, referenceTranslation=(0,0,0), colors=("r", "g", "b"), scale=1, alpha=1):
         origin = np.array(self.cs.translation) - np.array(referenceTranslation)
@@ -78,12 +80,15 @@ class CoordinateSystemArtist:
     def artists(self):
         return [self.xAxis,
                 self.yAxis,
-                self.zAxis]
+                self.zAxis,
+                self.text_artist]
 
     def init(self, ax):
         self.xAxis = ax.plot3D([], [], [], color="r", linewidth=2)[0]
         self.yAxis = ax.plot3D([], [], [], color="g", linewidth=2)[0]
         self.zAxis = ax.plot3D([], [], [], color="b", linewidth=2)[0]
+        x,y,z = self.cs.translation
+        self.text_artist = ax.text(x, y, z, self.text, "x")
 
         return self.artists()
 
@@ -113,8 +118,8 @@ class CSAnimation:
         self.ax = self.fig.gca(projection='3d')
         ax = self.ax
         ax.clear()
-        self.cs = CoordinateSystemArtist(CoordinateSystem(translation=(0., -1, 0)))
-        self.ref_cs = CoordinateSystemArtist(CoordinateSystem(translation=(0., 1, 0)))
+        self.cs = CoordinateSystemArtist(CoordinateSystem(translation=(0., -1, 0)), text="Estimated")
+        self.ref_cs = CoordinateSystemArtist(CoordinateSystem(translation=(0., 1, 0)), text="True")
 
         size = 2
         ax.set_xlim3d(-size, size)
