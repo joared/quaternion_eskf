@@ -1,6 +1,13 @@
 # quaternion_eskf
 Orientation estimation using quaternions and the Error State Kalman Filter (ESKF). For detailed explanation of the implementation, see quaternion_eskf.pdf.
 
+## Requirements
+*scipy==0.19.1  
+matplotlib==2.1.1  
+numpy==1.13.3
+
+*scipy is only required for running tests in rotation_utils.py and not needed for main.py
+
 ## Run the ESKF
 
     python3 main.py <dataset> [--update]
