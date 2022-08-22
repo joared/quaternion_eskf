@@ -8,6 +8,8 @@ import rotation_utils as Q
 from loaddata import load_repoimu, load_custom
 
 def analyze_sensor_data(data):
+    t = data["time"]
+
     g_data = np.array(data["gyro"])
     a_data = np.array(data["accel"])
 
@@ -24,17 +26,22 @@ def analyze_sensor_data(data):
     print()
     
     plt.subplot(2, 3, 1)
-    plt.plot(g_data[:, 0], c="r")
+    plt.ylabel("Gyro")
+    plt.plot(t, g_data[:, 0], c="r")
     plt.subplot(2, 3, 2)
-    plt.plot(g_data[:, 1], c="g")
+    plt.plot(t, g_data[:, 1], c="g")
     plt.subplot(2, 3, 3)
-    plt.plot(g_data[:, 2], c="b")
+    plt.plot(t, g_data[:, 2], c="b")
     plt.subplot(2, 3, 4)
-    plt.plot(a_data[:, 0], c="r")
+    plt.ylabel("Accelerometer")
+    plt.xlabel("x")
+    plt.plot(t, a_data[:, 0], c="r")
     plt.subplot(2, 3, 5)
-    plt.plot(a_data[:, 1], c="g")
+    plt.xlabel("y")
+    plt.plot(t, a_data[:, 1], c="g")
     plt.subplot(2, 3, 6)
-    plt.plot(a_data[:, 2], c="b")
+    plt.xlabel("z")
+    plt.plot(t, a_data[:, 2], c="b")
     plt.show()
 
     return g_mean, g_std, a_mean, a_std
